@@ -1,21 +1,22 @@
-import cv2
+import math
 from config import *
 from utils import push_snapshot, fingers_up
 
+PINCH_THRESHOLD_NORM = 0.055
+PINCH_STABLE_FRAMES = 2
+
 def process_gestures(lm, canvas, state):
-    hCam_local = hCam
-    wCam_local = wCam
 
-    raw_ix = int(lm[8].x * wCam_local)
-    raw_iy = int(lm[8].y * hCam_local)
+    raw_ix_px = int(lm[8].x * wCam)
+    raw_iy_px = int(lm[8].y * hCam)
 
-    # Estabilización
-    if state["stabilized_ix"] is None:
-        state["stabilized_ix"] = raw_ix
-        state["stabilized_iy"] = raw_iy
+    if state.get("stabilized_ix") is None:
+        state["stabilized_ix"] = raw_ix_px
+        state["stabilized_iy"] = raw_iy_px
     else:
-        state["stabilized_ix"] = int(state["stabilized_ix"] * (1 - smooth_factor) + raw_ix * smooth_factor)
-        state["stabilized_iy"] = int(state["stabilized_iy"] * (1 - smooth_factor) + raw_iy * smooth_factor)
+        sf = smooth_factor
+        state["stabilized_ix"] = int(state["stabilized_ix"] * (1 - sf) + raw_ix_px * sf)
+        state["stabilized_iy"] = int(state["stabilized_iy"] * (1 - sf) + raw_iy_px * sf)
 
     ix, iy = state["stabilized_ix"], state["stabilized_iy"]
 
@@ -24,11 +25,16 @@ def process_gestures(lm, canvas, state):
     index_up = up[1]
     middle_up = up[2]
 
-    # pinch detection
-    dx = (lm[4].x - lm[8].x) * wCam_local
-    dy = (lm[4].y - lm[8].y) * hCam_local
-    pinch_dist = (dx*dx + dy*dy) ** 0.5
-    is_pinch = pinch_dist < pinch_thresh_small and not middle_up and not up[3] and not up[4]
+    thumb = (lm[4].x, lm[4].y)
+    index = (lm[8].x, lm[8].y)
+    pinch_dist_norm = math.dist(thumb, index)
+    is_pinch_raw = pinch_dist_norm < PINCH_THRESHOLD_NORM
+
+    pinch_count = state.get("pinch_count", 0)
+    pinch_count = pinch_count + 1 if is_pinch_raw else 0
+    state["pinch_count"] = pinch_count
+
+    is_pinch = pinch_count >= PINCH_STABLE_FRAMES
 
     return {
         "ix": ix,
