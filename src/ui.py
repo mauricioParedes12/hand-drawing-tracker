@@ -25,6 +25,42 @@ def draw_palette(img, highlight_idx=None):
 
     return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
 
+def draw_thickness_bar(img, thickness):
+    overlay = img.copy()
+    alpha = 0.55
+
+    bar_x1 = 50
+    bar_y1 = 100
+    bar_x2 = 80
+    bar_y2 = hCam - 100
+
+    # Fondo de la barra
+    cv2.rectangle(overlay, (bar_x1, bar_y1), (bar_x2, bar_y2), (40, 40, 40), -1)
+
+    # Rango total de la barra
+    total_height = bar_y2 - bar_y1
+
+    # Convertir grosor a porcentaje
+    pct = (thickness - min_brush) / float(max_brush - min_brush)
+    pct = max(0, min(1, pct))  # clamp
+
+    bar_fill_top = int(bar_y2 - pct * total_height)
+
+    # Relleno dinámico (grosor)
+    cv2.rectangle(overlay, (bar_x1, bar_fill_top), (bar_x2, bar_y2), (0, 255, 255), -1)
+
+    # Texto
+    cv2.putText(
+        overlay,
+        f"{thickness}px",
+        (bar_x1 - 10, bar_y1 - 20),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2
+    )
+
+    return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
 
 def draw_status_bar(img, text):
     overlay = img.copy()
