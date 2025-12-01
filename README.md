@@ -1,3 +1,11 @@
+## Requisitos
+
+Tener asegurado de tener instalado:
+
+- Python **3.10+**
+- pip
+- Una cámara web funcional
+
 ## Instalación
 
 ### 1. Clonar el repositorio
