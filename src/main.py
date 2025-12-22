@@ -53,7 +53,10 @@ cap.set(3, wCam)
 cap.set(4, hCam)
 
 WINDOW_NAME = "HandPicture"
-cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_GUI_NORMAL)
+cv2.resizeWindow(WINDOW_NAME, wCam, hCam)
+total_up = 0
+ix, iy = 0, 0
 
 # -------------------------------------------------------------
 # LOOP PRINCIPAL
@@ -175,6 +178,8 @@ while True:
     if palette_active: combined = draw_palette(combined, highlight_idx)
     if is_pinch: combined = draw_thickness_bar(combined, brushThickness)
     combined = draw_status_bar(combined, gesture_text)
+    if total_up == 5 and not palette_active:
+        cv2.circle(combined, (ix, iy), eraserThickness // 2, (0, 0, 0), 2)
 
     cv2.imshow(WINDOW_NAME, combined)
     if cv2.waitKey(1) & 0xFF == ord('q'): break
