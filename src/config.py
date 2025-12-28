@@ -1,37 +1,36 @@
-import numpy as np # Librería para manejar matrices
-import cv2 # Librería para capturar video y dibujar
-import os # Para manejar carpetas y archivos
-import mediapipe as mp # Librería que usa IA para detectar las manos
+import numpy as np 
+import os 
+import mediapipe as mp 
 
-# Tamaño de la cámara
+# Seteamos la resolución de la cámara (HD)
 wCam, hCam = 1280, 720
-proc_scale = 0.5 # Reducción de escala
+proc_scale = 0.3 # Bajamos la escala a 0.3 para que la IA procese menos píxeles y no se laguee
 
-# Grosor inicial del pincel y borrador
+# Configuramos grosores iniciales
 brushThickness = 8
 eraserThickness = 50
 
 # Colores disponibles
 colors = [
-    (0, 0, 255),
-    (0, 255, 0),
-    (255, 0, 0),
-    (0, 255, 255)
+    (0, 0, 255),  # Rojo
+    (0, 255, 0),  # Verde
+    (255, 0, 0),  # Azul
+    (0, 255, 255) # Amarillo
 ]
 color_names = ["Rojo", "Verde", "Azul", "Amarillo"]
 
-# Mediapipe
-mp_hands = mp.solutions.hands # Módulo principal de manos
+# Configuramos MediaPipe para que detecte solo 1 mano con un 70% de confianza
+mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(
     max_num_hands=1,
     min_detection_confidence=0.7,
     min_tracking_confidence=0.7
-) # Config para detectar una mano
+) 
 
-# Canvas
+# Creamos el 'lienzo' negro donde se guardará nuestro dibujo
 canvas = np.zeros((hCam, wCam, 3), dtype=np.uint8)
 
-# Directorio de guardado
+# Creamos la carpeta de fotos si no existe
 SAVE_FOLDER = "saved_drawings"
 os.makedirs(SAVE_FOLDER, exist_ok=True)
 

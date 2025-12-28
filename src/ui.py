@@ -1,91 +1,119 @@
 import cv2
+import math
 from config import *
 
-def draw_palette(img, highlight_idx=None):
-    # Dibuja la barra inferior con los colores disponibles para elegir
-    overlay = img.copy() # copia para transparencia
-    alpha = 0.65 
-    bar_h = 120
-    y1 = hCam - bar_h # posición vertical de barra
+def draw_spatial_menu(img, current_ix, current_iy):
+    # Creamos un menú en el centro tipo "cruz" para elegir color rápido
+    overlay = img.copy()
+    h, w, _ = img.shape
+    center_x, center_y = w // 2, h // 2
+    
+    positions = [
+        (center_x, center_y - 120),
+        (center_x, center_y + 120),
+        (center_x - 120, center_y),
+        (center_x + 120, center_y)
+    ]
+    
+    selected_idx = None
+    base_radius = 45  # Radio normal
+    expanded_radius = 60 # Radio cuando el dedo está encima
 
-    cv2.rectangle(overlay, (0, y1), (wCam, hCam), (30, 30, 30), -1)
+    for i, pos in enumerate(positions):
+        col = colors[i]
+        # Calculamos la distancia entre el dedo índice y el centro de cada círculo
+        distance = math.hypot(current_ix - pos[0], current_iy - pos[1])
+        
+        # Efecto de agrandamiento del círculo
+        if distance < expanded_radius:
+            current_radius = expanded_radius
+            selected_idx = i
+            # Dibujamos un resplandor o borde blanco grueso
+            cv2.circle(overlay, pos, current_radius + 5, (255, 255, 255), -1)
+        else:
+            current_radius = base_radius
 
-    x = 600
-    for i, col in enumerate(colors):
-        x1, x2 = x, x + 120
-        y2 = hCam - 20
+        # Dibujamos el círculo del color correspondiente
+        cv2.circle(overlay, pos, current_radius, col, -1)
+        # Borde negro fino para que el color resalte más
+        cv2.circle(overlay, pos, current_radius, (0, 0, 0), 2)
 
-        # Si color seleccionado, dibujamos borde blanco
-        if highlight_idx == i:
-            cv2.rectangle(overlay, (x1 - 5, y1 + 5), (x2 + 5, y2 + 5), (255,255,255), -1)
-
-        cv2.rectangle(overlay, (x1, y1 + 10), (x2, y2), col, -1)
-        cv2.putText(overlay, color_names[i], (x1 + 10, y2 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2)
-
-        x += 150
-
-    return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+    return cv2.addWeighted(overlay, 0.7, img, 0.3, 0), selected_idx
 
 def draw_thickness_bar(img, thickness):
-    # Dibuja una barra vertical a la izquierda que indica el grosor del pincel
     overlay = img.copy()
-    alpha = 0.55
+    alpha = 0.55 # Transparencia de la barra de grososr
+    bar_x, bar_y, bar_w, bar_h = 50, 150, 25, 400 # Posición y dimensión fija de la barra
 
-    bar_x1 = 50
-    bar_y1 = 100
-    bar_x2 = 80
-    bar_y2 = hCam - 100
+    # Dibujamos fondo gris de la barra
+    cv2.rectangle(overlay, (bar_x-2, bar_y-2), (bar_x+bar_w+2, bar_y+bar_h+2), (200, 200, 200), 1)
+    cv2.rectangle(overlay, (bar_x, bar_y), (bar_x+bar_w, bar_y+bar_h), (30, 30, 30), -1)
 
-    # Fondo de la barra
-    cv2.rectangle(overlay, (bar_x1, bar_y1), (bar_x2, bar_y2), (40, 40, 40), -1)
-
-    # Rango total de la barra
-    total_height = bar_y2 - bar_y1
-
-    # Convertir grosor a porcentaje
+    # Llenado de la barra dinámico
     pct = (thickness - min_brush) / float(max_brush - min_brush)
-    pct = max(0, min(1, pct))  # clamp
-
-    bar_fill_top = int(bar_y2 - pct * total_height)
-
-    # Relleno dinámico (grosor)
-    cv2.rectangle(overlay, (bar_x1, bar_fill_top), (bar_x2, bar_y2), (0, 255, 255), -1)
+    fill_h = int(pct * bar_h)
+    
+    # Color cian para el progreso
+    cv2.rectangle(overlay, (bar_x, bar_y + bar_h - fill_h), (bar_x + bar_w, bar_y + bar_h), (255, 255, 0), -1)
 
     return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
 
-def draw_status_bar(img, text):
-    # Dibuja un cuadro de texto en la esquina inferior izquierda con el estado actual
+def draw_status_bar(img, text, current_color=(255, 255, 255)):
+    h, w, _ = img.shape
     overlay = img.copy()
-    alpha = 0.55
-    cv2.rectangle(overlay, (0, hCam - 60), (520, hCam), (20, 20, 20), -1)
-    cv2.putText(overlay, text, (20, hCam - 20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2)
-    return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+    
+    # Definimos el tamaño de la barra de estado
+    bar_w, bar_h = 420, 50 
+    x1, y1 = 15, h - bar_h - 15
+    x2, y2 = x1 + bar_w, h - 15
+    
+    # Aplicamos desenfoque a la barra
+    sub_img = img[y1:y2, x1:x2]
+    blur_zone = cv2.GaussianBlur(sub_img, (15, 15), 0)
+    overlay[y1:y2, x1:x2] = blur_zone
+
+    # Se agrega fondo oscuro con transparencia y borde blanco fino
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (20, 20, 20), -1)
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (255, 255, 255), 1, cv2.LINE_AA)
+
+    # Dibujamos un círculo pequeño que indica el color actual
+    cv2.circle(overlay, (x1 + 25, y1 + bar_h // 2), 10, current_color, -1)
+    cv2.circle(overlay, (x1 + 25, y1 + bar_h // 2), 11, (255, 255, 255), 1, cv2.LINE_AA)
+
+    # Se agrega texto que indica estados en mayúscula
+    font = cv2.FONT_HERSHEY_DUPLEX
+    text_pos = (x1 + 50, y1 + 33) 
+    cv2.putText(overlay, text.upper(), text_pos, font, 0.6, (0, 0, 0), 2, cv2.LINE_AA)
+    cv2.putText(overlay, text.upper(), text_pos, font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+
+    # Mezcla final
+    return cv2.addWeighted(overlay, 0.8, img, 0.2, 0) 
 
 def draw_save_progress(img, progress):
-    # Dibuja una barra central que se llena mientras se mantiene el gesto de guardar
     overlay = img.copy()
-    alpha = 0.60
-
-    # Tamaño de la barra
-    bar_width = 400
-    bar_height = 45
-
     h, w, _ = img.shape
 
-    # Centro de la pantalla
-    x1 = (w - bar_width) // 2
-    y1 = (h - bar_height) // 2
-    x2 = x1 + bar_width
-    y2 = y1 + bar_height
+    # Definimos posición y dimensiones de la barra de guardado
+    bar_w, bar_h = 450, 40
+    x1 = (w - bar_w) // 2
+    y1 = (h - bar_h) // 2
+    x2, y2 = x1 + bar_w, y1 + bar_h
 
-    # Barra de fondo (gris)
-    cv2.rectangle(overlay, (x1, y1), (x2, y2), (50, 50, 50), -1)
+    # Sombra exterior de la barra
+    cv2.rectangle(overlay, (x1 - 5, y1 - 5), (x2 + 5, y2 + 5), (20, 20, 20), -1)
+    
+    # Fondo gris oscuro de la barra
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (40, 40, 40), -1)
 
-    # Barra verde de avance
-    bar_fill = int(progress * bar_width)
-    cv2.rectangle(overlay, (x1, y1), (x1 + bar_fill, y2), (0, 200, 0), -1)
+    # Cálculo del progreso
+    bar_fill = int(progress * bar_w)
 
-    return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+    if bar_fill > 0:
+        # Carga de color verde de la barra
+        cv2.rectangle(overlay, (x1, y1), (x1 + bar_fill, y2), (0, 255, 0), -1)
+        
+        # Detalle de brillo superior blanco
+        cv2.line(overlay, (x1, y1 + 5), (x1 + bar_fill, y1 + 5), (200, 255, 200), 2)
 
+    # Aplicamos la transparencia
+    return cv2.addWeighted(overlay, 0.8, img, 0.2, 0)

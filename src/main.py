@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 from config import *
-from ui import draw_palette, draw_status_bar, draw_thickness_bar, draw_save_progress
+from ui import draw_spatial_menu, draw_status_bar, draw_thickness_bar, draw_save_progress
 from gestures import process_gestures
 from drawing import merge_canvas
 
@@ -11,20 +11,20 @@ from drawing import merge_canvas
 # FUNCIÓN PARA GUARDAR EL DIBUJO CON FONDO BLANCO
 # -------------------------------------------------------------
 def save_canvas(canvas, counter):
-    # Crear un fondo blanco del mismo tamaño que el dibujo
+    # Generamos un fondo blanco para reemplazar el fondo negro del canvas
     white_bg = np.ones_like(canvas) * 255
 
-    # Crear máscara para separar el dibujo del fondo negro original
+    # Procesamos máscaras para transferir solo el dibujo al fondo blanco
     gray = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
     _, mask = cv2.threshold(gray, 10, 255, cv2.THRESH_BINARY)
     mask_inv = cv2.bitwise_not(mask)
 
-    # Combinar el dibujo con el fondo blanco
+    # Combinamos fondo blanco y trazos de color
     bg = cv2.bitwise_and(white_bg, white_bg, mask=mask_inv)
     fg = cv2.bitwise_and(canvas, canvas, mask=mask)
     final = cv2.add(bg, fg)
 
-    # Guardar en la carpeta especificada
+    # Exportamos la imagen a la carpeta de destino
     filepath = os.path.join(SAVE_FOLDER, f"drawing_{counter}.png")
     cv2.imwrite(filepath, final)
     print(f"Imagen guardada en: {filepath}")
@@ -36,13 +36,13 @@ state = {"stabilized_ix": None, "stabilized_iy": None}
 palette_active = False
 current_color = colors[0]
 gesture_text = "Modo Normal"
-xp, yp = 0, 0 # Coordenadas previas para dibujar líneas continuas
+xp, yp = 0, 0 
 
-# Contadores de frames para validar gestos
+# Contadores para validar que un gesto sea intencional y no un error
 required_frames = 4
 erase_frames = select_frames = draw_frames = fist_frames = pinch_frames = 0
 save_frames = 0
-SAVE_REQUIRED_FRAMES = 40 # Tiempo que hay que mantener el gesto de guardado
+SAVE_REQUIRED_FRAMES = 40 
 save_counter = 1
 
 # -------------------------------------------------------------
@@ -65,10 +65,10 @@ while True:
     ret, frame = cap.read()
     if not ret: break
 
-    frame = cv2.flip(frame, 1) # Efecto espejo
+    frame = cv2.flip(frame, 1) 
     img = frame.copy()
 
-    # Procesamiento con MediaPipe en imagen reducida para mayor fluidez
+    # Redimensionamos la imagen para que MediaPipe trabaje más rápido
     small = cv2.resize(frame, (0, 0), fx=proc_scale, fy=proc_scale)
     rgb_small = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
     result = hands.process(rgb_small)
@@ -76,18 +76,18 @@ while True:
     highlight_idx = None
     is_pinch = False
     
-    # Fusionar video y canvas al inicio para tener la base donde dibujar la UI
+    # Combinamos la cámara con el lienzo de dibujo
     combined = merge_canvas(img, canvas)  
 
     if result.multi_hand_landmarks:
         lm = result.multi_hand_landmarks[0].landmark
 
-        # Extraer datos procesados de gestures.py
+        # Obtenemos la interpretación de la mano desde gestures.py
         G = process_gestures(lm, canvas, state)
         ix, iy, up, total_up = G["ix"], G["iy"], G["up"], G["total_up"]
         index_up, middle_up, is_pinch = G["index_up"], G["middle_up"], G["is_pinch"]
 
-        # Reset de contadores si el gesto cambia
+        # Limpieza de contadores si se deja de hacer un gesto
         if total_up != 5: erase_frames = 0
         if not (index_up and middle_up and total_up == 2): select_frames = 0
         if not (index_up and total_up == 1): draw_frames = 0
@@ -95,7 +95,7 @@ while True:
         if not is_pinch: pinch_frames = 0
 
         # LÓGICA DE GESTOS
-        # 1. Gesto de Guardado (Spider-man / Cuernos)
+        # 1. Guardar: se activa con el gesto de "cuernos"
         if up == [1, 0, 0, 0, 1]:
             save_frames += 1
             progress = min(save_frames / SAVE_REQUIRED_FRAMES, 1.0)
@@ -110,7 +110,7 @@ while True:
         else:
             save_frames = 0
 
-        # 2. Puño cerrado: Limpiar selección de colores
+        # 2. Mano cerrada: desactiva menús y resetea trazo
         if total_up == 0:
             fist_frames += 1
             if fist_frames >= required_frames:
@@ -118,7 +118,7 @@ while True:
                 xp = yp = 0
                 gesture_text = "Mano cerrada"
 
-        # 3. Mano abierta: Borrador
+        # 3. Mano abierta: activa el borrador (pinta negro sobre el canvas)
         elif total_up == 5 and not palette_active:
             erase_frames += 1
             if erase_frames >= required_frames:
@@ -127,22 +127,14 @@ while True:
                 xp, yp = ix, iy
                 gesture_text = "Borrando..."
 
-        # 4. Dos dedos arriba: Abrir paleta y elegir color
+        # 4. Dos dedos arriba: activa la selección de color espacial
         elif index_up and middle_up and total_up == 2:
             select_frames += 1
             if select_frames >= required_frames:
                 palette_active = True
-                xp = yp = 0
-                gesture_text = "Seleccionar color"
-                x = 600
-                for i, col in enumerate(colors):
-                    if x <= ix <= x + 120:
-                        current_color = col
-                        highlight_idx = i
-                        break
-                    x += 150
+                gesture_text = "Seleccione un color"
 
-        # 5. Pellizco: Ajustar grosor del pincel
+        # 5. Pellizco: ajusta el tamaño del pincel según la altura de la mano
         elif is_pinch:
             pinch_frames += 1
             if pinch_frames >= required_frames:
@@ -151,9 +143,12 @@ while True:
                 brushThickness = int(brushThickness * 0.6 + new_thickness * 0.4)
                 gesture_text = f"Grosor: {brushThickness}px"
 
-        # 6. Un dedo arriba: Dibujar
+        # 6. Un dedo arriba: modo dibujo estándar
         elif index_up and total_up == 1:
             draw_frames += 1
+            # Dibujamos un cursor visual del pincel
+            cv2.circle(combined, (ix, iy), brushThickness // 2, current_color, -1)
+            cv2.circle(combined, (ix, iy), (brushThickness // 2) + 2, (255, 255, 255), 1)
             if draw_frames >= required_frames:
                 if xp == 0 and yp == 0: xp, yp = ix, iy
                 cv2.line(canvas, (xp, yp), (ix, iy), current_color, brushThickness)
@@ -161,7 +156,7 @@ while True:
                 gesture_text = "Dibujando"
 
     else:
-        # Reset total cuando no hay mano presente
+        # Reset de variables si no se detecta ninguna mano
         erase_frames = select_frames = draw_frames = fist_frames = pinch_frames = 0
         gesture_text = "Esperando mano..."
         xp, yp = 0, 0
@@ -169,15 +164,15 @@ while True:
     # -------------------------------------------------------------
     # RENDERIZADO DE INTERFAZ (UI)
     # -------------------------------------------------------------
-    # Indicador de color actual
-    cv2.rectangle(combined, (20, 20), (180, 70), (40, 40, 40), -1)
-    cv2.putText(combined, "Color:", (30, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-    cv2.rectangle(combined, (130, 30), (170, 60), current_color, -1)
-
-    # UI condicional (Paleta, Grosor, etc.)
-    if palette_active: combined = draw_palette(combined, highlight_idx)
+    if palette_active: 
+        combined, detected_color_idx = draw_spatial_menu(combined, ix, iy)
+        if detected_color_idx is not None:
+            current_color = colors[detected_color_idx]
+            
     if is_pinch: combined = draw_thickness_bar(combined, brushThickness)
-    combined = draw_status_bar(combined, gesture_text)
+    
+    # Mostramos la barra de estado y el cursor del borrador si aplica
+    combined = draw_status_bar(combined, gesture_text, current_color)
     if total_up == 5 and not palette_active:
         cv2.circle(combined, (ix, iy), eraserThickness // 2, (0, 0, 0), 2)
 
