@@ -4,7 +4,7 @@ import mediapipe as mp
 
 # Seteamos la resolución de la cámara (HD)
 wCam, hCam = 1280, 720
-proc_scale = 0.3 # Bajamos la escala a 0.3 para que la IA procese menos píxeles y no se laguee
+proc_scale = 0.2 # Bajamos la escala a 0.3 para que la IA procese menos píxeles y no se laguee
 
 # Configuramos grosores iniciales
 brushThickness = 8
