@@ -1,4 +1,3 @@
-import cv2
 from config import *
 
 def fingers_up(lm): # Función para detectar qué dedos están levantados según landmarks
